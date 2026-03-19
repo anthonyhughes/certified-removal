@@ -34,7 +34,11 @@ parser.add_argument('--num-steps', type=int, default=100, help='number of optimi
 parser.add_argument('--train-mode', type=str, default='ovr', help='train mode [ovr/binary]')
 parser.add_argument('--train-sep', action='store_true', default=False, help='train binary classifiers separately')
 parser.add_argument('--verbose', action='store_true', default=False, help='verbosity in optimizer')
+parser.add_argument('--seed', type=int, default=42, help='random seed for reproducibility')
 args = parser.parse_args()
+
+torch.manual_seed(args.seed)
+np.random.seed(args.seed)
 
 if torch.backends.mps.is_available():
     device = torch.device("mps")
@@ -149,7 +153,7 @@ X_train, X_test, y_train, y_train_onehot, y_test = load_features(args)
 X_test = X_test.float().to(device)
 y_test = y_test.to(device)
 
-save_path = '%s/%s_%s_splits_%d_ratio_%.2f_std_%.1f_lam_%.0e.pth' % (
+save_path = '%s/%s_%s_splits_%d_ratio_%.2f_std_%.4g_lam_%.0e.pth' % (
     args.result_dir, args.extractor, args.dataset, args.train_splits, args.subsample_ratio, args.std, args.lam)
 if os.path.exists(save_path):
     # load trained models
@@ -267,6 +271,6 @@ else:
     pred = X_test.mv(w)
     print('Test accuracy = %.4f' % pred.gt(0).squeeze().eq(y_test.gt(0)).float().mean())
 
-save_path = '%s/%s_%s_splits_%d_ratio_%.2f_std_%.1f_lam_%.0e_removal.pth' % (
+save_path = '%s/%s_%s_splits_%d_ratio_%.2f_std_%.4g_lam_%.0e_removal.pth' % (
     args.result_dir, args.extractor, args.dataset, args.train_splits, args.subsample_ratio, args.std, args.lam)
 torch.save({'grad_norm_approx': grad_norm_approx, 'times': times}, save_path)
