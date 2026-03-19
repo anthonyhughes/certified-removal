@@ -36,7 +36,10 @@ parser.add_argument('--train-sep', action='store_true', default=False, help='tra
 parser.add_argument('--verbose', action='store_true', default=False, help='verbosity in optimizer')
 args = parser.parse_args()
 
-device = torch.device("cuda")
+if torch.backends.mps.is_available():
+    device = torch.device("mps")
+else:
+    device = torch.device("cpu")
 
 def lr_loss(w, X, y, lam):
     return -F.logsigmoid(y * X.mv(w)).mean() + lam * w.pow(2).sum() / 2
@@ -61,10 +64,10 @@ def lr_hessian_inv(w, X, y, lam, batch_size=50000):
             H = X_i.t().mm(D[lower:upper].unsqueeze(1) * X_i)
         else:
             H += X_i.t().mm(D[lower:upper].unsqueeze(1) * X_i)
-    return (H + lam * X.size(0) * torch.eye(X.size(1)).float().to(device)).inverse()
+    return torch.linalg.inv(H + lam * X.size(0) * torch.eye(X.size(1)).float().to(device))
 
 def lr_optimize(X, y, lam, b=None, num_steps=100, tol=1e-10, verbose=False):
-    w = torch.autograd.Variable(torch.zeros(X.size(1)).float().to(device), requires_grad=True)
+    w = torch.zeros(X.size(1)).float().to(device).requires_grad_(True)
     def closure():
         if b is None:
             return lr_loss(w, X, y, lam)
@@ -90,7 +93,7 @@ def ovr_lr_loss(w, X, y, lam, weight=None):
         return -F.logsigmoid(z).mul_(weight).sum() + lam * w.pow(2).sum() / 2
 
 def ovr_lr_optimize(X, y, lam, weight=None, b=None, num_steps=100, tol=1e-10, verbose=False):
-    w = torch.autograd.Variable(torch.zeros(X.size(1), y.size(1)).float().to(device), requires_grad=True)
+    w = torch.zeros(X.size(1), y.size(1)).float().to(device).requires_grad_(True)
     def closure():
         if b is None:
             return ovr_lr_loss(w, X, y, lam, weight)
@@ -112,7 +115,7 @@ def ovr_lr_optimize(X, y, lam, weight=None, b=None, num_steps=100, tol=1e-10, ve
     return w.data
 
 def batch_multiply(A, B, batch_size=500000):
-    if A.is_cuda:
+    if A.device.type != 'cpu':
         if len(B.size()) == 1:
             return A.mv(B)
         else:
@@ -150,7 +153,7 @@ save_path = '%s/%s_%s_splits_%d_ratio_%.2f_std_%.1f_lam_%.0e.pth' % (
     args.result_dir, args.extractor, args.dataset, args.train_splits, args.subsample_ratio, args.std, args.lam)
 if os.path.exists(save_path):
     # load trained models
-    checkpoint = torch.load(save_path)
+    checkpoint = torch.load(save_path, weights_only=True)
     w = checkpoint['w']
     b = checkpoint['b']
     weight = checkpoint['weight']
@@ -232,10 +235,10 @@ for i in range(args.num_removes):
                 grad_i = lr_grad(w_approx[:, k], X_train[i].unsqueeze(0), y_train[i, k].unsqueeze(0), args.lam)
                 # apply rank-1 down-date to K
                 if weight is None:
-                    K -= torch.ger(X_train[i], X_train[i])
+                    K -= torch.outer(X_train[i], X_train[i])
                     spec_norm = spectral_norm(K)
                 else:
-                    Ks[k] -= torch.ger(X_train[i], X_train[i])
+                    Ks[k] -= torch.outer(X_train[i], X_train[i])
                     spec_norm = spectral_norm(Ks[k])
                 Delta = H_inv.mv(grad_i)
                 Delta_p = X_rem.mv(Delta)
@@ -247,7 +250,7 @@ for i in range(args.num_removes):
         y_rem = y_train[(i+1):]
         H_inv = lr_hessian_inv(w_approx[:], X_rem, y_rem, args.lam)
         grad_i = lr_grad(w_approx, X_train[i].unsqueeze(0), y_train[i].unsqueeze(0), args.lam)
-        K -= torch.ger(X_train[i], X_train[i])
+        K -= torch.outer(X_train[i], X_train[i])
         spec_norm = spectral_norm(K)
         Delta = H_inv.mv(grad_i)
         Delta_p = X_rem.mv(Delta)

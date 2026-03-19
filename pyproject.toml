@@ -1,0 +1,12 @@
+[project]
+name = "certified-removal"
+version = "0.1.0"
+description = "Certified Data Removal from Machine Learning Models (ICML 2020)"
+requires-python = ">=3.11"
+dependencies = [
+    "torch==2.2.2",
+    "torchvision==0.17.2",
+    "numpy<2",
+    "scikit-learn",
+    "opacus==1.4.0",
+]

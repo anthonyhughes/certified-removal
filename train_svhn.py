@@ -22,7 +22,7 @@ from test_func import test, test_linear
 import utils
 import time
 import os
-from torchdp.privacy_analysis import compute_rdp, get_privacy_spent
+from opacus.accountants.analysis.rdp import compute_rdp, get_privacy_spent
 
 
 def main():
@@ -53,9 +53,12 @@ def main():
     args = parser.parse_args()
 
     torch.manual_seed(args.seed)
-    device = torch.device("cuda")
+    if torch.backends.mps.is_available():
+        device = torch.device("mps")
+    else:
+        device = torch.device("cpu")
 
-    kwargs = {'num_workers': 1, 'pin_memory': True}
+    kwargs = {'num_workers': 1, 'pin_memory': device.type == 'cuda'}
     transform = transforms.Compose([
         transforms.ToTensor(),
         transforms.Normalize((0.5, 0.5, 0.5), (1.0, 1.0, 1.0)),
@@ -84,7 +87,7 @@ def main():
         # compute privacy loss using RDP analysis
         orders = ([1.25, 1.5, 1.75, 2., 2.25, 2.5, 3., 3.5, 4., 4.5] +
                     list(range(5, 64)) + [128, 256, 512, 1024, 2048, 4096])
-        epsilon, _ = get_privacy_spent(orders, compute_rdp(q, args.std, T, orders), args.delta)
+        epsilon, _ = get_privacy_spent(orders=orders, rdp=compute_rdp(q=q, noise_multiplier=args.std, steps=T, orders=orders), delta=args.delta)
         print('RDP computed privacy loss: epsilon = %.2f at delta = %.2e' % (epsilon, args.delta))
         start = time.time()
         for epoch in range(1, args.epochs + 1):
@@ -98,7 +101,7 @@ def main():
         if args.save_model:
             torch.save({'extr': extr.state_dict(), 'clf': clf.state_dict()}, save_path)
     else:
-        checkpoint = torch.load(save_path)
+        checkpoint = torch.load(save_path, weights_only=True)
         extr.load_state_dict(checkpoint['extr'])
         clf.load_state_dict(checkpoint['clf'])
         if args.test_mode == 'linear':

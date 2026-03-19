@@ -41,7 +41,7 @@ def load_features(args):
     
     ckpt_file = '%s/%s_%s_extracted.pth' % (args.data_dir, args.extractor, args.dataset)
     if os.path.exists(ckpt_file):
-        checkpoint = torch.load(ckpt_file)
+        checkpoint = torch.load(ckpt_file, weights_only=True)
         X_train = checkpoint['X_train'].cpu()
         y_train = checkpoint['y_train'].cpu()
         X_test = checkpoint['X_test'].cpu()
@@ -49,8 +49,8 @@ def load_features(args):
     else:
         print('Extracted features not found, loading raw features.')
         if args.dataset == 'MNIST':
-            trainset = datasets.MNIST(args.data_dir, train=True, transform=transforms.ToTensor())
-            testset = datasets.MNIST(args.data_dir, train=False, transform=transforms.ToTensor())
+            trainset = datasets.MNIST(args.data_dir, train=True, download=True, transform=transforms.ToTensor())
+            testset = datasets.MNIST(args.data_dir, train=False, download=True, transform=transforms.ToTensor())
             X_train = torch.zeros(len(trainset), 784)
             y_train = torch.zeros(len(trainset))
             X_test = torch.zeros(len(testset), 784)
