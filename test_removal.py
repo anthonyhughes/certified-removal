@@ -203,6 +203,7 @@ else:
     print('Test accuracy = %.4f' % pred.gt(0).squeeze().eq(y_test.gt(0)).float().mean())
 
 grad_norm_approx = torch.zeros(args.num_removes).float()
+grad_norm_true = torch.zeros(args.num_removes).float()
 times = torch.zeros(args.num_removes)
 if args.train_mode == 'ovr':
     y_train = y_train_onehot
@@ -260,9 +261,15 @@ for i in range(args.num_removes):
         Delta_p = X_rem.mv(Delta)
         w_approx += Delta
         grad_norm_approx[i] += (Delta.norm() * Delta_p.norm() * spec_norm / 4).cpu()
-            
+
+        # True gradient residual: ||∇L(w_approx; D_rem)|| on remaining data
+        true_grad = lr_grad(w_approx, X_rem, y_rem, args.lam)
+        if b is not None:
+            true_grad = true_grad + b
+        grad_norm_true[i] = (true_grad.norm() / X_rem.size(0)).cpu()
+
     times[i] = time.time() - start
-    print('Iteration %d: Grad norm bound = %.6f, time = %.2fs' % (i+1, grad_norm_approx[i], times[i]))
+    print('Iteration %d: Grad norm bound = %.6f, true norm = %.6f, time = %.2fs' % (i+1, grad_norm_approx[i], grad_norm_true[i], times[i]))
 
 if args.train_mode == 'ovr':
     pred = X_test.mm(w_approx).max(1)[1]
@@ -273,4 +280,4 @@ else:
 
 save_path = '%s/%s_%s_splits_%d_ratio_%.2f_std_%.4g_lam_%.0e_removal.pth' % (
     args.result_dir, args.extractor, args.dataset, args.train_splits, args.subsample_ratio, args.std, args.lam)
-torch.save({'grad_norm_approx': grad_norm_approx, 'times': times}, save_path)
+torch.save({'grad_norm_approx': grad_norm_approx, 'grad_norm_true': grad_norm_true, 'times': times}, save_path)

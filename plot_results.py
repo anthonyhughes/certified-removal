@@ -150,6 +150,7 @@ def collect_data():
     er_grid = {}      # (lam, std) -> expected_removals (data-dependent)
     er_wc_grid = {}   # (lam, std) -> expected_removals (worst-case Thm. 1)
     norms_grid = {}   # (lam, std) -> list of per-step gradient norms
+    true_norms_grid = {}  # (lam, std) -> list of true gradient residual norms
 
     n_train = compute_n_train()
 
@@ -165,8 +166,10 @@ def collect_data():
             gn = rem["grad_norm_approx"].tolist()
             norms_grid[(lam, std)] = gn
             er_grid[(lam, std)] = compute_expected_removals(gn, std)
+            if "grad_norm_true" in rem:
+                true_norms_grid[(lam, std)] = rem["grad_norm_true"].tolist()
 
-    return acc_grid, er_grid, er_wc_grid, norms_grid, n_train
+    return acc_grid, er_grid, er_wc_grid, norms_grid, true_norms_grid, n_train
 
 
 # --------------------------------------------------------------------------- #
@@ -421,7 +424,7 @@ def plot_accuracy_vs_removals_annotated(acc_grid, er_grid, ax=None,
 #  Plot 3: Gradient residual norms  (Figure 2)                                #
 # --------------------------------------------------------------------------- #
 
-def plot_gradient_norms(norms_grid):
+def plot_gradient_norms(norms_grid, true_norms_grid=None, n_train=None):
     lam, std = 1e-3, 10.0
     if (lam, std) not in norms_grid:
         print("  SKIP fig2: no 1000-removal data for λ=1e-3, σ=10")
@@ -430,28 +433,45 @@ def plot_gradient_norms(norms_grid):
     norms = norms_grid[(lam, std)]
     n_removals = len(norms)
     xs = np.arange(1, n_removals + 1)
+    _n = n_train if n_train is not None else 11982
 
-    # Cumulative data-dependent bound
-    cumul = np.cumsum(norms)
+    # Cumulative data-dependent single bound (Corollary 1)
+    cumul_data_single = np.cumsum(norms)
 
-    # Worst-case bound (Theorem 1)
-    n_train = 11982  # approximate MNIST 3v8 size
-    worst_per = 4 * GAMMA * C_GRAD**2 / (lam**2 * (n_train - 1))
-    worst_cumul = worst_per * xs
+    # Worst-case single bound (Theorem 1): cumulative = T * per_step
+    worst_per = 4 * GAMMA * C_GRAD**2 / (lam**2 * (_n - 1))
+    worst_cumul_single = worst_per * xs
+
+    # Worst-case batch bound (Theorem 3): T * 4γC² / (λ²(n - T))
+    worst_cumul_batch = np.array([
+        t * 4 * GAMMA * C_GRAD**2 / (lam**2 * max(_n - t, 1))
+        for t in xs
+    ])
+
+    # Data-dependent batch bound (Corollary 2)
+    norms_arr = np.array(norms)
+    cumul_data_batch = np.array([
+        np.sum(norms_arr[:t]) * (1 + GAMMA * np.max(norms_arr[:t]) / lam)
+        for t in xs
+    ])
 
     fig, ax = plt.subplots(figsize=(6, 4.2))
 
-    ax.semilogy(xs, cumul, "-", color="#1f77b4", linewidth=1.5,
-                label="Data-dependent (Corollary 1)")
-    ax.semilogy(xs, worst_cumul, "-", color="#aec7e8", linewidth=1.5,
-                label="Worst-case (Theorem 1)")
-    ax.semilogy(xs, norms, "-", color="#ff7f0e", linewidth=0.8, alpha=0.7,
-                label="Per-step bound")
+    # Match paper colour scheme
+    ax.semilogy(xs, worst_cumul_single, "-", color="#aec7e8", linewidth=1.5,
+                label="Worst-case single (Theorem 1)")
+    ax.semilogy(xs, worst_cumul_batch, "-", color="#c7e8ae", linewidth=1.5,
+                label="Worst-case batch (Theorem 3)")
+    ax.semilogy(xs, cumul_data_single, "-", color="#1f77b4", linewidth=1.5,
+                label="Data-dependent single (Corollary 1)")
+    ax.semilogy(xs, cumul_data_batch, "-", color="#2ca02c", linewidth=1.5,
+                label="Data-dependent batch (Corollary 2)")
 
-    # Budget line
-    budget = std * 1.0 / C_DELTA
-    ax.axhline(budget, color="red", linestyle="--", linewidth=1, alpha=0.7,
-               label=f"Budget $\\sigma\\varepsilon/c = {budget:.2f}$")
+    # True gradient residual norm
+    if true_norms_grid is not None and (lam, std) in true_norms_grid:
+        true_norms = true_norms_grid[(lam, std)]
+        ax.semilogy(xs, true_norms, "--", color="black", linewidth=1.5,
+                    label="True value")
 
     ax.set_xlabel("# of Removals")
     ax.set_ylabel("Gradient Residual Norm")
@@ -470,7 +490,8 @@ def plot_gradient_norms(norms_grid):
 #  Combined 3-panel figure                                                     #
 # --------------------------------------------------------------------------- #
 
-def plot_combined(acc_grid, er_grid, norms_grid, er_wc_grid=None, n_train=None):
+def plot_combined(acc_grid, er_grid, norms_grid, er_wc_grid=None, n_train=None,
+                  true_norms_grid=None):
     fig, axes = plt.subplots(2, 2, figsize=(12, 9))
 
     # (0,0) Accuracy vs σ
@@ -484,27 +505,40 @@ def plot_combined(acc_grid, er_grid, norms_grid, er_wc_grid=None, n_train=None):
     plot_accuracy_vs_removals_annotated(acc_grid, er_grid, ax=axes[1, 0],
                                         er_wc_grid=er_wc_grid)
 
-    # (1,1) Gradient residual norms
+    # (1,1) Gradient residual norms — Figure 2 with all 5 lines
     lam, std = 1e-3, 10.0
     if (lam, std) in norms_grid:
         norms = norms_grid[(lam, std)]
         n_removals = len(norms)
         xs = np.arange(1, n_removals + 1)
-        cumul = np.cumsum(norms)
         _n = n_train if n_train is not None else 11982
+
+        cumul_data_single = np.cumsum(norms)
         worst_per = 4 * GAMMA * C_GRAD**2 / (lam**2 * (_n - 1))
-        worst_cumul = worst_per * xs
-        budget = std * 1.0 / C_DELTA
+        worst_cumul_single = worst_per * xs
+        worst_cumul_batch = np.array([
+            t * 4 * GAMMA * C_GRAD**2 / (lam**2 * max(_n - t, 1))
+            for t in xs
+        ])
+        norms_arr = np.array(norms)
+        cumul_data_batch = np.array([
+            np.sum(norms_arr[:t]) * (1 + GAMMA * np.max(norms_arr[:t]) / lam)
+            for t in xs
+        ])
 
         ax = axes[1, 1]
-        ax.semilogy(xs, cumul, "-", color="#1b6d35", linewidth=1.5,
-                    label="Data-dep. (Cor. 1)")
-        ax.semilogy(xs, worst_cumul, "-", color="#c7e3cc", linewidth=1.5,
-                    label="Worst-case (Thm. 1)")
-        ax.semilogy(xs, norms, "-", color="#3da660", linewidth=0.8, alpha=0.7,
-                    label="Per-step bound")
-        ax.axhline(budget, color="#d62728", linestyle="--", linewidth=1, alpha=0.7,
-                   label=f"Budget ($\\sigma\\varepsilon/c$)")
+        ax.semilogy(xs, worst_cumul_single, "-", color="#aec7e8", linewidth=1.5,
+                    label="Worst-case single (Thm. 1)")
+        ax.semilogy(xs, worst_cumul_batch, "-", color="#c7e8ae", linewidth=1.5,
+                    label="Worst-case batch (Thm. 3)")
+        ax.semilogy(xs, cumul_data_single, "-", color="#1f77b4", linewidth=1.5,
+                    label="Data-dep. single (Cor. 1)")
+        ax.semilogy(xs, cumul_data_batch, "-", color="#2ca02c", linewidth=1.5,
+                    label="Data-dep. batch (Cor. 2)")
+        if true_norms_grid is not None and (lam, std) in true_norms_grid:
+            true_norms = true_norms_grid[(lam, std)]
+            ax.semilogy(xs, true_norms, "--", color="black", linewidth=1.5,
+                        label="True value")
         ax.set_xlabel("# of Removals")
         ax.set_ylabel("Gradient Residual Norm")
         ax.set_title(f"Grad. Norm Bounds ($\\lambda=10^{{-3}}$, $\\sigma=10$)")
@@ -527,7 +561,7 @@ def plot_combined(acc_grid, er_grid, norms_grid, er_wc_grid=None, n_train=None):
 
 def main():
     print("Collecting data from result/ ...")
-    acc_grid, er_grid, er_wc_grid, norms_grid, n_train = collect_data()
+    acc_grid, er_grid, er_wc_grid, norms_grid, true_norms_grid, n_train = collect_data()
     print(f"  {len(acc_grid)} accuracy entries, {len(er_grid)} removal entries, "
           f"{len(norms_grid)} norm traces, n_train={n_train}\n")
 
@@ -536,9 +570,10 @@ def main():
     plot_accuracy_vs_epsilon(acc_grid, norms_grid, n_train=n_train)
     plot_accuracy_vs_removals(acc_grid, er_grid, er_wc_grid=er_wc_grid)
     plot_accuracy_vs_removals_annotated(acc_grid, er_grid, er_wc_grid=er_wc_grid)
-    plot_gradient_norms(norms_grid)
+    plot_gradient_norms(norms_grid, true_norms_grid=true_norms_grid, n_train=n_train)
     plot_combined(acc_grid, er_grid, norms_grid,
-                  er_wc_grid=er_wc_grid, n_train=n_train)
+                  er_wc_grid=er_wc_grid, n_train=n_train,
+                  true_norms_grid=true_norms_grid)
 
     print(f"\nAll plots saved to {PLOT_DIR}/")
 

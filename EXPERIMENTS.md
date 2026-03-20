@@ -76,3 +76,8 @@ uv run python run_mnist_experiments.py --phase 3    # 1000-removal trace
 
 Results are saved to `result/mnist_experiments.json`.
 
+### Phase 3 extended comparisons (added 2026-03-20)
+- **True gradient residual norm**: ‖∇L(w_approx; D_rem)‖ at each step.
+- **Worst-case batch (Theorem 3)**: T·4γC²/(λ²(n−T)).
+- **Data-dependent batch (Corollary 2)**: cumulative single bound × correction factor.
+

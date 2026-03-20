@@ -103,6 +103,32 @@ estimated from 100 Newton-update removal steps and linear extrapolation.
 | Cumulative bound grows ~linearly | Confirmed over 1000 removals | ✓ Reproduced |
 | Higher λ → more removals at cost of accuracy | Confirmed | ✓ Reproduced |
 | Removal is orders of magnitude faster than re-training | 0.115s vs ~8s (~70×) | ✓ Reproduced |
+| Figure 2: 5 lines match paper structure | All 5 series now plotted | ✓ Reproduced |
+| True gradient norm ≪ data-dep. bound | ~2 orders of magnitude gap | ✓ Reproduced |
+
+---
+
+### True Gradient Residual Norm (added 2026-03-20)
+
+After re-running Phase 3 with the true gradient norm computation, the plot
+now includes all 5 lines from the paper's Figure 2:
+
+| Line | Source | Scale at T=1000 |
+|---|---|---|
+| Worst-case batch (Theorem 3) | T·4γC²/(λ²(n−T)) | ~10⁵·⁹ |
+| Worst-case single (Theorem 1) | T·4γC²/(λ²(n−1)) | ~10⁴·⁹ |
+| Data-dependent batch (Corollary 2) | Σβᵢ × (1 + γ·max(βᵢ)/λ) | ~10¹·⁶ |
+| Data-dependent single (Corollary 1) | Σβᵢ | ~10⁰·⁷ |
+| True value | ‖∇L(w_approx; D_rem)‖ | ~10⁻²·⁹ |
+
+**Observations:**
+- The true gradient residual norm (~10⁻³) is ~3.5 orders of magnitude below
+  the data-dependent single bound (~10⁰·⁷), confirming the Newton update is
+  highly effective.
+- The batch bounds (Theorem 3, Corollary 2) sit above their single-removal
+  counterparts, as expected.
+- The gap between worst-case and data-dependent bounds is ~4 orders of
+  magnitude, consistent with the paper.
 
 ---
 

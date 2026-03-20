@@ -59,3 +59,19 @@ Updated to run locally on a cpu.
   - Green colour palette matching the paper's visual style.
   - Each plot saved as both `.pdf` and `.png`.
 
+## 2026-03-20 — Figure 2 alignment with paper
+
+### test_removal.py
+- Added computation of **true gradient residual norm** at each removal step: `‖∇L(w_approx; D_rem) + b‖ / n_rem`. Saved as `grad_norm_true` in the removal checkpoint alongside the existing `grad_norm_approx`.
+
+### plot_results.py
+- `plot_gradient_norms`: Replaced 3-line plot with full 5-line Figure 2 matching the paper:
+  - Worst-case single (Theorem 1) — light blue
+  - Worst-case batch (Theorem 3) — light green
+  - Data-dependent single (Corollary 1) — blue
+  - Data-dependent batch (Corollary 2) — green
+  - True value (actual gradient residual norm) — black dashed
+- Removed per-step bound and budget line (not in paper's Figure 2).
+- `collect_data`: Now loads `grad_norm_true` from removal checkpoints.
+- `plot_combined`: Updated Figure 2 panel with all 5 lines.
+
