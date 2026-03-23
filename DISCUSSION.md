@@ -26,11 +26,7 @@ The line zig-zags between high-accuracy/low-σ points and low-accuracy/high-σ p
 
 ### Why the Original Paper Doesn't Show This?
 
-The paper almost certainly computes expected removals from the worst-case theoretical per-step bound (Theorem 1):
-
-$$\beta_{\text{step}} = \frac{4\gamma C^2}{\lambda^2 (n-1)}$$
-
-This bound is **independent of σ**, so E[T] = σε / (c_δ · β_step) is guaranteed monotonically increasing in σ. Our implementation uses actual empirical gradient norms from the removal run instead, which breaks this monotonicity for large σ with small λ.
+The paper almost certainly computes expected removals from the worst-case theoretical per-step bound (Theorem 1). This bound is **independent of σ**, which I believe guarantees monotonically increasing in σ. The code implementation uses actual empirical gradient norms from the removal run instead, which breaks this monotonicity for large σ with small λ!
 
 ---
 
